@@ -4,6 +4,7 @@ class ApiService {
   private static instance: ApiService;
   private token: string | null = null;
 
+
   private constructor() {
     this.token = localStorage.getItem('token');
   }
@@ -232,10 +233,18 @@ class ApiService {
   }
 
   // Asientos
-  async crearAsiento(data: any) {
+   async crearAsiento(asientoData: {
+    piso: number;
+    columna: string;
+    fila: string;
+    precio: number;
+    descripcion: string;
+    estado: string;
+    idBus: number;
+  }) {
     return this.request<any>('/asientos', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(asientoData),
     });
   }
 
@@ -251,18 +260,30 @@ class ApiService {
     return this.request<any[]>('/asientos/disponibles', {}, false);
   }
 
-  async editarAsiento(id: number, data: any) {
+  async editarAsiento(
+    id: number,
+    asientoData: {
+      piso?: number;
+      columna?: string;
+      fila?: string;
+      precio?: number;
+      descripcion?: string;
+      estado?: string;
+      idBus?: number;
+    }
+  ) {
     return this.request<any>(`/asientos/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(asientoData),
     });
   }
 
   async eliminarAsiento(id: number) {
     return this.request<void>(`/asientos/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
   }
+
 
   // Viajes
   async crearViaje(data: any) {
