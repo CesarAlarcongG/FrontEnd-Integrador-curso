@@ -66,7 +66,7 @@ const ViajesManager: React.FC = () => {
       setSelectedDate(new Date(editingViaje.fechaSalida));
       setFormData({
         horaSalida: editingViaje.horaSalida.slice(0, 5),
-        fechaSalida: editingViaje.fechaSalada,
+        fechaSalida: editingViaje.fechaSalida,
         costo: editingViaje.costo.toString(),
         idRuta: editingViaje.idRuta?.toString() || '',
         // ⭐ Lógica mejorada para pre-seleccionar el bus:
