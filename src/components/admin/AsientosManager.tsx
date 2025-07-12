@@ -10,8 +10,8 @@ const AsientosManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     piso: '',
-    asiento: '',
-    precio: '',
+    fila: '',
+    columna: '',
     descripcion: '',
     estado: 'DISPONIBLE',
     idBus: ''
@@ -40,17 +40,16 @@ const AsientosManager: React.FC = () => {
     
     try {
       const asientoData = {
-        ...formData,
         piso: parseInt(formData.piso),
-        precio: parseFloat(formData.precio),
+        fila: formData.fila,
+        columna: formData.columna,
+        descripcion: formData.descripcion,
+        estado: formData.estado,
         idBus: parseInt(formData.idBus)
       };
       
       if (editingAsiento) {
-        await ApiService.editarAsiento(editingAsiento.idAsiento, {
-          ...asientoData,
-          idAsiento: editingAsiento.idAsiento
-        });
+        await ApiService.editarAsiento(editingAsiento.idAsiento, asientoData);
       } else {
         await ApiService.crearAsiento(asientoData);
       }
@@ -58,7 +57,14 @@ const AsientosManager: React.FC = () => {
       await cargarDatos();
       setShowForm(false);
       setEditingAsiento(null);
-      setFormData({ piso: '', asiento: '', precio: '', descripcion: '', estado: 'DISPONIBLE', idBus: '' });
+      setFormData({ 
+        piso: '', 
+        fila: '', 
+        columna: '', 
+        descripcion: '', 
+        estado: 'DISPONIBLE', 
+        idBus: '' 
+      });
     } catch (error) {
       console.error('Error al guardar asiento:', error);
     } finally {
@@ -70,8 +76,8 @@ const AsientosManager: React.FC = () => {
     setEditingAsiento(asiento);
     setFormData({
       piso: asiento.piso.toString(),
-      asiento: asiento.asiento,
-      precio: asiento.precio.toString(),
+      fila: asiento.fila,
+      columna: asiento.columna,
       descripcion: asiento.descripcion,
       estado: asiento.estado,
       idBus: asiento.idBus.toString()
@@ -93,7 +99,14 @@ const AsientosManager: React.FC = () => {
   const handleCancel = () => {
     setShowForm(false);
     setEditingAsiento(null);
-    setFormData({ piso: '', asiento: '', precio: '', descripcion: '', estado: 'DISPONIBLE', idBus: '' });
+    setFormData({ 
+      piso: '', 
+      fila: '', 
+      columna: '', 
+      descripcion: '', 
+      estado: 'DISPONIBLE', 
+      idBus: '' 
+    });
   };
 
   return (
@@ -136,30 +149,33 @@ const AsientosManager: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número de Asiento
+                  Fila (A, B, C, etc.)
                 </label>
                 <input
                   type="text"
-                  value={formData.asiento}
-                  onChange={(e) => setFormData({...formData, asiento: e.target.value})}
+                  value={formData.fila}
+                  onChange={(e) => setFormData({...formData, fila: e.target.value.toUpperCase()})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   required
+                  maxLength={1}
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio
+                  Columna (1-4)
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.precio}
-                  onChange={(e) => setFormData({...formData, precio: e.target.value})}
+                <select
+                  value={formData.columna}
+                  onChange={(e) => setFormData({...formData, columna: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   required
-                />
+                >
+                  <option value="">Seleccionar columna</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -186,7 +202,6 @@ const AsientosManager: React.FC = () => {
                 value={formData.descripcion}
                 onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                required
               />
             </div>
             <div>
@@ -201,7 +216,7 @@ const AsientosManager: React.FC = () => {
               >
                 <option value="">Seleccionar bus</option>
                 {buses.map(bus => (
-                  <option key={bus.idBus} value={bus.idBus}>
+                  <option key={bus.idCarro} value={bus.idCarro}>
                     {bus.placa} - {bus.conductor ? `${bus.conductor.nombre} ${bus.conductor.apellido}` : 'Sin conductor'}
                   </option>
                 ))}
@@ -235,10 +250,7 @@ const AsientosManager: React.FC = () => {
                 Piso
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Asiento
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Precio
+                Fila/Columna
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Estado
@@ -258,10 +270,7 @@ const AsientosManager: React.FC = () => {
                   {asiento.piso}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {asiento.asiento}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  S/. {asiento.precio}
+                  {asiento.fila}{asiento.columna}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <span className={`px-2 py-1 text-xs rounded-full ${
@@ -273,7 +282,7 @@ const AsientosManager: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {asiento.idBus}
+                  {buses.find(b => b.idCarro === asiento.idBus)?.placa || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <div className="flex space-x-2">

@@ -50,10 +50,20 @@ class ApiService {
     const response = await fetch(url, config);
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData && errorData.message) {
+          errorMessage += ` - ${errorData.message}`;
+        } else if (typeof errorData === 'string') {
+          errorMessage += ` - ${errorData}`;
+        }
+      } catch (e) {
+        // No se pudo parsear el JSON de error, usa el mensaje por defecto
+      }
+      throw new Error(errorMessage);
     }
 
-    // ✅ Solución para manejar respuestas 204 No Content
     if (response.status === 204 || response.headers.get('Content-Length') === '0') {
       return {} as T;
     }
@@ -158,11 +168,11 @@ class ApiService {
     return this.request<any>(`/rutas/${id}`);
   }
   async editarRuta(id: number, ruta: any) {
-  return this.request<any>(`/rutas/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(ruta),
-  });
-}
+    return this.request<any>(`/rutas/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(ruta),
+    });
+  }
 
   async eliminarRuta(id: number) {
     return this.request<void>(`/rutas/${id}`, {
@@ -233,11 +243,10 @@ class ApiService {
   }
 
   // Asientos
-   async crearAsiento(asientoData: {
+  async crearAsiento(asientoData: {
     piso: number;
     columna: string;
     fila: string;
-    precio: number;
     descripcion: string;
     estado: string;
     idBus: number;
@@ -266,7 +275,6 @@ class ApiService {
       piso?: number;
       columna?: string;
       fila?: string;
-      precio?: number;
       descripcion?: string;
       estado?: string;
       idBus?: number;
@@ -299,8 +307,12 @@ class ApiService {
     return this.request<any[]>('/viajes');
   }
 
+  async obtenerViajePorId(id: number): Promise<any> { // ⭐ Nuevo método para obtener viaje por ID ⭐
+    return this.request<any>(`/viajes/${id}`, {}, false); // Asumiendo que no requiere autenticación para consultar estado
+  }
+
   async buscarViajes(data: any) {
-    return this.request<any[]>('/viajes/buscar', {
+    return this.request<any[]>('/viajes/buscar-viajes', {
       method: 'POST',
       body: JSON.stringify(data),
     }, false);
@@ -313,24 +325,26 @@ class ApiService {
     });
   }
 
+  async eliminarViaje(id: number) {
+    return this.request<void>(`/viajes/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Pasajes
-  async crearPasaje(data: any) {
-    return this.request<any>('/pasajes', {
+  async crearPasaje(data: any): Promise<any> {
+    return this.request('/pasajes', {
       method: 'POST',
       body: JSON.stringify(data),
     }, false);
   }
 
-  async obtenerPasajes() {
-    return this.request<any[]>('/pasajes', {}, false);
+  async obtenerPasajes(): Promise<any[]> {
+    return this.request('/pasajes', {}, false); 
   }
 
-  async obtenerPasajePorId(id: number) {
-    return this.request<any>(`/pasajes/${id}`, {}, false);
-  }
-
-  async obtenerPasajesPorUsuario(usuarioId: number) {
-    return this.request<any[]>(`/pasajes/usuario/${usuarioId}`, {}, false);
+  async obtenerPasajesPorUsuario(usuarioId: number): Promise<any[]> {
+    return this.request(`/pasajes/usuario/${usuarioId}`, {}, false);
   }
 }
 

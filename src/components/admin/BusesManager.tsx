@@ -7,7 +7,6 @@ interface Asiento {
   piso: number;
   fila: string;
   columna: string;
-  precio: number;
   descripcion: string;
   estado: string;
   idBus: number;
@@ -20,6 +19,7 @@ interface Bus {
   conductor?: {
     nombre: string;
     apellido: string;
+    dni?: string;  
   };
   asientos?: Asiento[];
 }
@@ -36,11 +36,10 @@ const BusesManager: React.FC = () => {
   });
   const [selectedBus, setSelectedBus] = useState<Bus | null>(null);
   const [currentFloor, setCurrentFloor] = useState<number>(1);
-  const [asientoForm, setAsientoForm] = useState({
+    const [asientoForm, setAsientoForm] = useState({
     piso: 1,
     fila: '',
     columna: '',
-    precio: 0,
     descripcion: '',
     estado: 'DISPONIBLE',
     idBus: 0
@@ -60,7 +59,21 @@ const BusesManager: React.FC = () => {
         ApiService.obtenerBuses(),
         ApiService.obtenerConductores()
       ]);
-      setBuses(busesResponse);
+
+      // Mapear los buses para incluir la información del conductor
+      const busesConConductores = busesResponse.map(bus => {
+        const conductor = conductoresResponse.find(c => c.idTrabajador === bus.idConductor);
+        return {
+          ...bus,
+          conductor: conductor ? {
+            nombre: conductor.nombre,
+            apellido: conductor.apellido,
+            dni: conductor.dni
+          } : undefined
+        };
+      });
+
+      setBuses(busesConConductores);
       setConductores(conductoresResponse);
     } catch (error) {
       console.error('Error al cargar datos:', error);
@@ -117,11 +130,11 @@ const BusesManager: React.FC = () => {
   };
 
   const handleAsientoSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    try {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
+  
+  try {
       await ApiService.crearAsiento({
         ...asientoForm,
         idBus: selectedBus?.idCarro || 0
@@ -135,7 +148,6 @@ const BusesManager: React.FC = () => {
         piso: 1,
         fila: '',
         columna: '',
-        precio: 0,
         descripcion: '',
         estado: 'DISPONIBLE',
         idBus: selectedBus?.idCarro || 0
@@ -193,7 +205,7 @@ const BusesManager: React.FC = () => {
       <div 
         key={`${asiento.piso}-${asiento.fila}${asiento.columna}`}
         className={`${bgColor} p-2 rounded-md text-center text-sm font-medium cursor-pointer hover:opacity-80 relative`}
-        title={`${asiento.fila}${asiento.columna} - ${asiento.descripcion} (S/. ${asiento.precio})`}
+        title={`${asiento.fila}${asiento.columna} - ${asiento.descripcion}`}
       >
         {asiento.fila}{asiento.columna}
         {isWindowSide && (
@@ -447,7 +459,6 @@ const BusesManager: React.FC = () => {
                       piso: 1,
                       fila: '',
                       columna: '',
-                      precio: 0,
                       descripcion: '',
                       estado: 'DISPONIBLE',
                       idBus: selectedBus.idCarro
@@ -545,21 +556,7 @@ const BusesManager: React.FC = () => {
                   <option value="4">Columna 4 (Ventana derecha)</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={asientoForm.precio}
-                  onChange={(e) => setAsientoForm({...asientoForm, precio: parseFloat(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  required
-                  disabled={loading}
-                />
-              </div>
+            
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Descripción

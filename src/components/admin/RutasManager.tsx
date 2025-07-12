@@ -152,7 +152,7 @@ const RutasManager: React.FC = () => {
           className="bg-white p-6 rounded-lg shadow space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            {/* <label className="block text-sm font-medium text-gray-700 mb-1">
               Nombre
             </label>
             <input
@@ -163,7 +163,7 @@ const RutasManager: React.FC = () => {
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required
-            />
+            /> */}
           </div>
 
           <div>
@@ -201,7 +201,7 @@ const RutasManager: React.FC = () => {
                   className="flex justify-between bg-white p-2 border rounded"
                 >
                   <span>
-                    #{i + 1} - {ag.departamento}, {ag.provincia}
+                    #{i + 1} - {ag.provincia}
                   </span>
                   <div className="flex space-x-1">
                     <button
@@ -237,7 +237,7 @@ const RutasManager: React.FC = () => {
                     onChange={() => toggleAgenciaSeleccionada(ag)}
                   />
                   <span>
-                    {ag.departamento}, {ag.provincia}
+                    {ag.provincia}
                   </span>
                 </label>
               ))}
