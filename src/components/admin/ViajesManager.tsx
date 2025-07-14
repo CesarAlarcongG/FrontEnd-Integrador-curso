@@ -20,7 +20,7 @@ interface Viaje {
   fechaSalida: string;
   costo: number;
   idRuta: number;
-  idCarro: number | null; // ⭐ CAMBIADO: Ahora idCarro puede ser null ⭐
+  idCarro: number | null;
   estado: string;
   rutaDTO?: RutaDTO;
   busDTO?: BusDTO;
@@ -63,14 +63,22 @@ const ViajesManager: React.FC = () => {
 
   useEffect(() => {
     if (editingViaje) {
-      setSelectedDate(new Date(editingViaje.fechaSalida));
+      // Cuando editas un viaje, la fecha que viene del backend (editingViaje.fechaSalida)
+      // ya es una cadena 'YYYY-MM-DD'. Necesitamos convertirla a un objeto Date
+      // de tal manera que DatePicker la entienda correctamente sin desviar el día.
+      // Sumamos la diferencia de la zona horaria para compensar el UTC por defecto.
+      const dateParts = editingViaje.fechaSalida.split('-').map(Number);
+      // DatePicker espera un objeto Date. Creamos uno que apunte al mediodía UTC
+      // del día deseado para evitar problemas con cambios de día por la zona horaria.
+      // O, más simple y robusto, construir una fecha UTC a partir de los componentes:
+      const dateForDatePicker = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
+      setSelectedDate(dateForDatePicker);
+
       setFormData({
         horaSalida: editingViaje.horaSalida.slice(0, 5),
-        fechaSalida: editingViaje.fechaSalida,
+        fechaSalida: editingViaje.fechaSalida, // Mantén la cadena original 'YYYY-MM-DD'
         costo: editingViaje.costo.toString(),
         idRuta: editingViaje.idRuta?.toString() || '',
-        // ⭐ Lógica mejorada para pre-seleccionar el bus:
-        // Prioriza idCarro de busDTO si existe, si no, usa idCarro del viaje, y si ambos son null, usa cadena vacía. ⭐
         idCarro: (editingViaje.busDTO?.idCarro || editingViaje.idCarro)?.toString() || '',
         estado: editingViaje.estado
       });
@@ -107,11 +115,19 @@ const ViajesManager: React.FC = () => {
         throw new Error('Todos los campos son obligatorios');
       }
 
-      const formattedDate = selectedDate.toISOString().split('T')[0];
+      // ⭐ CORRECCIÓN CLAVE: Formatea la fecha directamente del DatePicker a 'YYYY-MM-DD'
+      // sin introducir problemas de zona horaria al usar toISOString.
+      // DatePicker.js ya nos da un objeto Date en la zona horaria local seleccionada.
+      // Para asegurarnos de que la fecha se envíe como 'YYYY-MM-DD' sin la hora ni la zona horaria,
+      // construimos la cadena manualmente.
+      const year = selectedDate.getFullYear();
+      const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0'); // +1 porque los meses son 0-indexados
+      const day = selectedDate.getDate().toString().padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
 
       const viajeData = {
         horaSalida: formData.horaSalida,
-        fechaSalida: formattedDate,
+        fechaSalida: formattedDate, // Usar la fecha formateada correctamente
         costo: parseFloat(formData.costo),
         idRuta: parseInt(formData.idRuta),
         idCarro: parseInt(formData.idCarro),
@@ -120,15 +136,17 @@ const ViajesManager: React.FC = () => {
 
       if (editingViaje) {
         await ApiService.editarViaje(editingViaje.idRutas, viajeData);
+        alert('Viaje editado correctamente.');
       } else {
         await ApiService.crearViaje(viajeData);
+        alert('Viaje creado correctamente.');
       }
 
       await cargarDatos();
       resetForm();
     } catch (err) {
       console.error('Error al guardar viaje:', err);
-      alert(err instanceof Error ? err.message : 'Error desconocido');
+      alert(err instanceof Error ? err.message : 'Error desconocido al guardar el viaje.');
     } finally {
       setLoading(false);
     }
@@ -136,15 +154,21 @@ const ViajesManager: React.FC = () => {
 
   const handleEdit = (viaje: Viaje) => {
     setEditingViaje(viaje);
+    // ⭐ CORRECCIÓN: Para mostrar la fecha correctamente en el DatePicker cuando editas.
+    // Convertimos la cadena 'YYYY-MM-DD' a un objeto Date interpretado como UTC
+    // y luego ajustamos la zona horaria para que DatePicker lo muestre localmente.
+    // Una forma más simple es añadir 'T00:00:00' para que se interprete como el inicio del día UTC.
+    const dateForDatePicker = new Date(viaje.fechaSalida + 'T00:00:00');
+    setSelectedDate(dateForDatePicker);
+
     setFormData({
       horaSalida: viaje.horaSalida.slice(0, 5),
       fechaSalida: viaje.fechaSalida,
       costo: viaje.costo.toString(),
       idRuta: viaje.idRuta?.toString() || '',
-      idCarro: (viaje.busDTO?.idCarro || viaje.idCarro)?.toString() || '', // ⭐ Lógica mejorada para pre-seleccionar el bus ⭐
+      idCarro: (viaje.busDTO?.idCarro || viaje.idCarro)?.toString() || '',
       estado: viaje.estado
     });
-    setSelectedDate(new Date(viaje.fechaSalida));
     setShowForm(true);
   };
 
@@ -306,7 +330,10 @@ const ViajesManager: React.FC = () => {
                   {viaje.horaSalida}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {new Date(viaje.fechaSalida).toLocaleDateString('es-ES')}
+                  {/* ⭐ CORRECCIÓN CLAVE: Para mostrar la fecha sin desviar el día.
+                      Crea una fecha tratada como UTC para el día específico y luego
+                      la formatea a una cadena local, que respetará el día original. */}
+                  {new Date(viaje.fechaSalida + 'T00:00:00').toLocaleDateString('es-ES', { timeZone: 'UTC' })}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   S/ {viaje.costo.toFixed(2)}
@@ -318,17 +345,17 @@ const ViajesManager: React.FC = () => {
                   {viaje.busDTO?.placa || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                     ${viaje.estado === 'Programado' ? 'bg-blue-100 text-blue-800' :
-                       viaje.estado === 'En Sala de Espera / Abordando' ? 'bg-yellow-100 text-yellow-800' :
-                       viaje.estado === 'A Tiempo' ? 'bg-green-100 text-green-800' :
-                       viaje.estado === 'Retrasado' ? 'bg-orange-100 text-orange-800' :
-                       viaje.estado === 'En Ruta' ? 'bg-purple-100 text-purple-800' :
-                       viaje.estado === 'En Parada' ? 'bg-indigo-100 text-indigo-800' :
-                       viaje.estado === 'Llegada Estimada' ? 'bg-teal-100 text-teal-800' :
-                       viaje.estado === 'Finalizado' ? 'bg-gray-100 text-gray-800' :
-                       viaje.estado === 'Cancelado' ? 'bg-red-100 text-red-800' :
-                       'bg-gray-100 text-gray-800' // Default
+                      viaje.estado === 'En Sala de Espera / Abordando' ? 'bg-yellow-100 text-yellow-800' :
+                      viaje.estado === 'A Tiempo' ? 'bg-green-100 text-green-800' :
+                      viaje.estado === 'Retrasado' ? 'bg-orange-100 text-orange-800' :
+                      viaje.estado === 'En Ruta' ? 'bg-purple-100 text-purple-800' :
+                      viaje.estado === 'En Parada' ? 'bg-indigo-100 text-indigo-800' :
+                      viaje.estado === 'Llegada Estimada' ? 'bg-teal-100 text-teal-800' :
+                      viaje.estado === 'Finalizado' ? 'bg-gray-100 text-gray-800' :
+                      viaje.estado === 'Cancelado' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800' // Default
                     }`}>
                     {viaje.estado}
                   </span>

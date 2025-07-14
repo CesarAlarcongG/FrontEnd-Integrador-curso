@@ -23,6 +23,7 @@ interface Viaje {
   costo: number;
   idRuta: number;
   idCarro: number | null;
+  estado: string; // ✨ Nuevo campo de estado ✨
   busDTO?: {
     idCarro: number;
     placa: string;
@@ -63,7 +64,8 @@ const AdminDashboard: React.FC = () => {
     horaSalida: '',
     costo: '',
     idRuta: '',
-    idCarro: ''
+    idCarro: '',
+    estado: 'Programado' // ✨ Estado por defecto 'Programado' ✨
   });
 
   const menuItems = [
@@ -91,6 +93,7 @@ const AdminDashboard: React.FC = () => {
       const viajesAdaptados = viajesResponse.map((viaje: any) => ({
         ...viaje,
         idViaje: viaje.idRutas, // Aseguramos que idViaje tenga un valor
+        estado: viaje.estado || 'Programado', // Asegurar que el estado exista, si no, usa 'Programado'
       }));
 
       setViajes(viajesAdaptados);
@@ -112,7 +115,7 @@ const AdminDashboard: React.FC = () => {
   const resetFormulario = () => {
     setEditingViaje(null);
     setShowAddViajeForm(false);
-    setViajeForm({ horaSalida: '', costo: '', idRuta: '', idCarro: '' });
+    setViajeForm({ horaSalida: '', costo: '', idRuta: '', idCarro: '', estado: 'Programado' }); // ✨ Resetea el estado ✨
   };
 
   const handleEdit = (viaje: Viaje) => {
@@ -122,6 +125,7 @@ const AdminDashboard: React.FC = () => {
       costo: viaje.costo.toString(),
       idRuta: viaje.idRuta.toString(),
       idCarro: viaje.idCarro?.toString() || '',
+      estado: viaje.estado || 'Programado', // ✨ Carga el estado existente o 'Programado' ✨
     });
     setShowAddViajeForm(true);
   };
@@ -144,10 +148,15 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleSaveViaje = async () => {
+    // We want the selectedDate to be exactly what was clicked, without timezone conversion issues.
+    // selectedDate is already in 'YYYY-MM-DD' format.
     const fechaSalida = editingViaje ? editingViaje.fechaSalida : selectedDate;
-    if (!fechaSalida) return;
+    if (!fechaSalida) {
+      alert('Por favor selecciona una fecha para el viaje.');
+      return;
+    }
 
-    if (!viajeForm.horaSalida || !viajeForm.idRuta || !viajeForm.idCarro || !viajeForm.costo) {
+    if (!viajeForm.horaSalida || !viajeForm.idRuta || !viajeForm.idCarro || !viajeForm.costo || !viajeForm.estado) {
       alert('Por favor complete todos los campos del formulario');
       return;
     }
@@ -157,18 +166,21 @@ const AdminDashboard: React.FC = () => {
     try {
       const viajeData = {
         horaSalida: viajeForm.horaSalida.includes(':') ? viajeForm.horaSalida : `${viajeForm.horaSalida}:00`,
-        fechaSalida: fechaSalida,
+        fechaSalida: fechaSalida, // Send the date string as is
         costo: parseFloat(viajeForm.costo),
         idRuta: parseInt(viajeForm.idRuta),
-        idCarro: parseInt(viajeForm.idCarro)
+        idCarro: parseInt(viajeForm.idCarro),
+        estado: viajeForm.estado // ✨ Incluye el estado en los datos a guardar ✨
       };
 
       if (editingViaje && editingViaje.idViaje) {
         // Modo Edición
         await ApiService.editarViaje(editingViaje.idViaje, viajeData);
+        alert('Viaje editado correctamente.');
       } else {
         // Modo Creación
         await ApiService.crearViaje(viajeData);
+        alert('Viaje creado correctamente.');
       }
 
       await cargarDatos(); // Recargar todos los datos para reflejar los cambios
@@ -182,7 +194,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-
   // --- Renderizado del Calendario y Componentes ---
   const renderCalendar = () => {
     const year = currentDate.getFullYear();
@@ -194,6 +205,7 @@ const AdminDashboard: React.FC = () => {
     const days = [];
     const prevMonthDays = new Date(year, month, 0).getDate();
 
+    // Days from previous month
     for (let i = 0; i < startingDay; i++) {
       days.push({
         day: prevMonthDays - startingDay + i + 1,
@@ -203,17 +215,25 @@ const AdminDashboard: React.FC = () => {
     }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0); // Normalize today to start of day in local time
 
+    // Days for the current month
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(year, month, i);
-      date.setHours(0, 0, 0, 0);
-      const dateStr = date.toISOString().split('T')[0];
+      // To ensure 'date' is a local date string like 'YYYY-MM-DD' without timezone issues for comparison,
+      // we can construct the string directly.
+      const dateStr = [
+        date.getFullYear(),
+        (date.getMonth() + 1).toString().padStart(2, '0'),
+        i.toString().padStart(2, '0')
+      ].join('-');
+
       const hasViajes = viajes.some(v => v.fechaSalida === dateStr);
-      const isPast = date < today;
+      const isPast = date < today; // Comparison should be based on local dates
       days.push({ day: i, currentMonth: true, date: dateStr, hasViajes, isPast });
     }
 
+    // Days from next month
     const totalDays = days.length;
     const remainingDays = 7 - (totalDays % 7);
     if (remainingDays < 7) {
@@ -242,9 +262,11 @@ const AdminDashboard: React.FC = () => {
   };
 
   const formatLocalDate = (dateString: string) => {
-    const date = new Date(dateString);
-    date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-    return date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    // This function converts a 'YYYY-MM-DD' string into a locale-specific date string for display.
+    // We create a Date object and specify it as UTC to prevent it from shifting based on the local timezone
+    // then use toLocaleDateString, which will convert it to the local timezone for display.
+    const date = new Date(dateString + 'T00:00:00'); // Append T00:00:00 to ensure it's treated as start of day UTC
+    return date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   };
 
   const renderViajesDelDia = () => {
@@ -323,6 +345,21 @@ const AdminDashboard: React.FC = () => {
                     required
                   />
                 </div>
+                {/* ✨ Campo de Estado ✨ */}
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Estado</label>
+                  <select
+                    value={viajeForm.estado}
+                    onChange={(e) => setViajeForm({ ...viajeForm, estado: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    required
+                  >
+                    <option value="Programado">Programado</option>
+                    <option value="Cancelado">Cancelado</option>
+                    <option value="En Curso">En Curso</option>
+                    <option value="Finalizado">Finalizado</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end space-x-2 mt-4">
                 <button onClick={resetFormulario} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400" disabled={loading}>
@@ -335,7 +372,7 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {loading ? (
+          {loading && !showAddViajeForm ? ( // Only show full-page loader if not in form
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mx-auto"></div>
             </div>
@@ -351,15 +388,16 @@ const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="text-sm text-gray-600 mb-1"><span className="font-medium">Ruta:</span> {viaje.rutaDTO?.nombre || 'Ruta no asignada'}</div>
                       <div className="text-sm text-gray-600 mb-1"><span className="font-medium">Hora:</span> {viaje.horaSalida}</div>
-                      <div className="text-sm text-gray-600"><span className="font-medium">Costo:</span> S/ {viaje.costo?.toFixed(2) || '0.00'}</div>
+                      <div className="text-sm text-gray-600 mb-1"><span className="font-medium">Costo:</span> S/ {viaje.costo?.toFixed(2) || '0.00'}</div>
+                      <div className="text-sm text-gray-600"><span className="font-medium">Estado:</span> {viaje.estado}</div> {/* ✨ Muestra el estado ✨ */}
                     </div>
                     <div className="flex items-center space-x-2">
-                        <button onClick={() => handleEdit(viaje)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-full">
-                            <Edit className="h-5 w-5" />
-                        </button>
-                        <button onClick={() => handleDelete(viaje.idViaje || viaje.idRutas!)} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full">
-                            <Trash2 className="h-5 w-5" />
-                        </button>
+                      <button onClick={() => handleEdit(viaje)} className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-full">
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button onClick={() => handleDelete(viaje.idViaje || viaje.idRutas!)} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -421,7 +459,12 @@ const AdminDashboard: React.FC = () => {
                       <React.Fragment key={`week-${weekIndex}`}>
                         {week.map((day, dayIndex) => {
                           const isSelected = selectedDate === day.date;
-                          const isClickable = day.currentMonth && !day.isPast && !loading;
+                          const todayLocal = new Date();
+                          todayLocal.setHours(0,0,0,0);
+                          const dayDateObj = new Date(day.date + 'T00:00:00'); // Ensure it's treated as start of day UTC
+                          const isPast = dayDateObj < todayLocal; // Compare with local today
+                          const isClickable = day.currentMonth && !isPast && !loading;
+
                           return (
                             <div
                               key={`day-${weekIndex}-${dayIndex}`}
@@ -429,7 +472,7 @@ const AdminDashboard: React.FC = () => {
                               className={`p-2 h-16 border rounded-lg flex flex-col ${day.currentMonth
                                 ? isSelected
                                   ? 'bg-orange-100 border-orange-300'
-                                  : day.isPast
+                                  : isPast
                                     ? 'bg-gray-200 border-gray-200 text-gray-400 cursor-not-allowed'
                                     : 'hover:bg-gray-50 border-gray-200 cursor-pointer'
                                 : 'text-gray-400 border-transparent'
