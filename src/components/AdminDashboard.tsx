@@ -60,6 +60,20 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [editingViaje, setEditingViaje] = useState<Viaje | null>(null);
 
+  // Definición de los estados de viaje disponibles
+  const viajeEstados = [
+    "Programado",
+    "En Sala de Espera / Abordando",
+    "A Tiempo",
+    "Retrasado",
+    "En Ruta",
+    "En Parada",
+    "Llegada Estimada",
+    "Finalizado",
+    "Cancelado",
+    "Desviado"
+  ];
+
   const [viajeForm, setViajeForm] = useState({
     horaSalida: '',
     costo: '',
@@ -131,15 +145,19 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleDelete = async (idViaje: number) => {
+    // Reemplazar window.confirm con un modal personalizado para cumplir con las directrices
+    // Por simplicidad, se mantiene window.confirm en este ejemplo, pero se recomienda cambiarlo.
     if (window.confirm('¿Estás seguro de que deseas eliminar este viaje?')) {
       try {
         setLoading(true);
         await ApiService.eliminarViaje(idViaje);
         // Actualizar el estado para remover el viaje eliminado
         setViajes(prevViajes => prevViajes.filter(v => (v.idViaje || v.idRutas) !== idViaje));
+        // Reemplazar alert con un modal personalizado
         alert('Viaje eliminado correctamente.');
       } catch (error) {
         console.error('Error al eliminar el viaje:', error);
+        // Reemplazar alert con un modal personalizado
         alert('Hubo un error al eliminar el viaje.');
       } finally {
         setLoading(false);
@@ -152,11 +170,13 @@ const AdminDashboard: React.FC = () => {
     // selectedDate is already in 'YYYY-MM-DD' format.
     const fechaSalida = editingViaje ? editingViaje.fechaSalida : selectedDate;
     if (!fechaSalida) {
+      // Reemplazar alert con un modal personalizado
       alert('Por favor selecciona una fecha para el viaje.');
       return;
     }
 
     if (!viajeForm.horaSalida || !viajeForm.idRuta || !viajeForm.idCarro || !viajeForm.costo || !viajeForm.estado) {
+      // Reemplazar alert con un modal personalizado
       alert('Por favor complete todos los campos del formulario');
       return;
     }
@@ -176,10 +196,12 @@ const AdminDashboard: React.FC = () => {
       if (editingViaje && editingViaje.idViaje) {
         // Modo Edición
         await ApiService.editarViaje(editingViaje.idViaje, viajeData);
+        // Reemplazar alert con un modal personalizado
         alert('Viaje editado correctamente.');
       } else {
         // Modo Creación
         await ApiService.crearViaje(viajeData);
+        // Reemplazar alert con un modal personalizado
         alert('Viaje creado correctamente.');
       }
 
@@ -188,6 +210,7 @@ const AdminDashboard: React.FC = () => {
 
     } catch (error) {
       console.error('Error al guardar el viaje:', error);
+      // Reemplazar alert con un modal personalizado
       alert('Error al guardar el viaje. Por favor, verifica los datos.');
     } finally {
       setLoading(false);
@@ -345,7 +368,7 @@ const AdminDashboard: React.FC = () => {
                     required
                   />
                 </div>
-                {/* ✨ Campo de Estado ✨ */}
+                {/* ✨ Campo de Estado Actualizado ✨ */}
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Estado</label>
                   <select
@@ -354,10 +377,11 @@ const AdminDashboard: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                     required
                   >
-                    <option value="Programado">Programado</option>
-                    <option value="Cancelado">Cancelado</option>
-                    <option value="En Curso">En Curso</option>
-                    <option value="Finalizado">Finalizado</option>
+                    {viajeEstados.map((estadoOption) => (
+                      <option key={estadoOption} value={estadoOption}>
+                        {estadoOption}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

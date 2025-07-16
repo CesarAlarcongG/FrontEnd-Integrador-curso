@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Calendar as CalendarIcon, Info } from 'lucide-react';
-import ApiService from '../../services/api';
+import { Plus, Edit, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import ApiService from '../../services/api'; // Asegúrate de que esta ruta es correcta
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -50,12 +50,13 @@ const ViajesManager: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [formData, setFormData] = useState({
     horaSalida: '',
-    fechaSalida: '',
+    fechaSalida: '', // Esta se actualizará al seleccionar una fecha
     costo: '',
     idRuta: '',
     idCarro: '',
     estado: 'Programado'
   });
+  const [filterEstado, setFilterEstado] = useState<string>('Todos');
 
   useEffect(() => {
     cargarDatos();
@@ -63,20 +64,14 @@ const ViajesManager: React.FC = () => {
 
   useEffect(() => {
     if (editingViaje) {
-      // Cuando editas un viaje, la fecha que viene del backend (editingViaje.fechaSalida)
-      // ya es una cadena 'YYYY-MM-DD'. Necesitamos convertirla a un objeto Date
-      // de tal manera que DatePicker la entienda correctamente sin desviar el día.
-      // Sumamos la diferencia de la zona horaria para compensar el UTC por defecto.
-      const dateParts = editingViaje.fechaSalida.split('-').map(Number);
-      // DatePicker espera un objeto Date. Creamos uno que apunte al mediodía UTC
-      // del día deseado para evitar problemas con cambios de día por la zona horaria.
-      // O, más simple y robusto, construir una fecha UTC a partir de los componentes:
-      const dateForDatePicker = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
+      // Usamos 'T00:00:00' para que Date siempre interprete el inicio del día
+      // Esto ayuda a evitar problemas de zona horaria que puedan desplazar la fecha
+      const dateForDatePicker = new Date(editingViaje.fechaSalida + 'T00:00:00');
       setSelectedDate(dateForDatePicker);
 
       setFormData({
         horaSalida: editingViaje.horaSalida.slice(0, 5),
-        fechaSalida: editingViaje.fechaSalida, // Mantén la cadena original 'YYYY-MM-DD'
+        fechaSalida: editingViaje.fechaSalida,
         costo: editingViaje.costo.toString(),
         idRuta: editingViaje.idRuta?.toString() || '',
         idCarro: (editingViaje.busDTO?.idCarro || editingViaje.idCarro)?.toString() || '',
@@ -115,37 +110,38 @@ const ViajesManager: React.FC = () => {
         throw new Error('Todos los campos son obligatorios');
       }
 
-      // ⭐ CORRECCIÓN CLAVE: Formatea la fecha directamente del DatePicker a 'YYYY-MM-DD'
-      // sin introducir problemas de zona horaria al usar toISOString.
-      // DatePicker.js ya nos da un objeto Date en la zona horaria local seleccionada.
-      // Para asegurarnos de que la fecha se envíe como 'YYYY-MM-DD' sin la hora ni la zona horaria,
-      // construimos la cadena manualmente.
+      // Formateamos la fecha del DatePicker a YYYY-MM-DD
       const year = selectedDate.getFullYear();
-      const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0'); // +1 porque los meses son 0-indexados
+      const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
       const day = selectedDate.getDate().toString().padStart(2, '0');
       const formattedDate = `${year}-${month}-${day}`;
 
       const viajeData = {
         horaSalida: formData.horaSalida,
-        fechaSalida: formattedDate, // Usar la fecha formateada correctamente
+        fechaSalida: formattedDate,
         costo: parseFloat(formData.costo),
         idRuta: parseInt(formData.idRuta),
         idCarro: parseInt(formData.idCarro),
         estado: formData.estado
       };
 
+      // ⭐ AÑADE ESTE CONSOLE.LOG PARA DEPURAR ⭐
+      console.log('Datos enviados para guardar/actualizar viaje:', viajeData);
+
       if (editingViaje) {
+        // Asegúrate de que el idRutas se esté pasando correctamente
         await ApiService.editarViaje(editingViaje.idRutas, viajeData);
-        alert('Viaje editado correctamente.');
+        
       } else {
         await ApiService.crearViaje(viajeData);
-        alert('Viaje creado correctamente.');
+        
       }
 
       await cargarDatos();
       resetForm();
     } catch (err) {
       console.error('Error al guardar viaje:', err);
+      // Muestra el mensaje de error específico si viene del backend
       alert(err instanceof Error ? err.message : 'Error desconocido al guardar el viaje.');
     } finally {
       setLoading(false);
@@ -154,10 +150,8 @@ const ViajesManager: React.FC = () => {
 
   const handleEdit = (viaje: Viaje) => {
     setEditingViaje(viaje);
-    // ⭐ CORRECCIÓN: Para mostrar la fecha correctamente en el DatePicker cuando editas.
-    // Convertimos la cadena 'YYYY-MM-DD' a un objeto Date interpretado como UTC
-    // y luego ajustamos la zona horaria para que DatePicker lo muestre localmente.
-    // Una forma más simple es añadir 'T00:00:00' para que se interprete como el inicio del día UTC.
+    // Usamos 'T00:00:00' para que Date siempre interprete el inicio del día
+    // Esto ayuda a evitar problemas de zona horaria que puedan desplazar la fecha
     const dateForDatePicker = new Date(viaje.fechaSalida + 'T00:00:00');
     setSelectedDate(dateForDatePicker);
 
@@ -185,6 +179,13 @@ const ViajesManager: React.FC = () => {
     }
   };
 
+  const filteredViajes = viajes.filter(viaje => {
+    if (filterEstado === 'Todos') {
+      return true;
+    }
+    return viaje.estado === filterEstado;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -202,6 +203,21 @@ const ViajesManager: React.FC = () => {
           <Plus className="h-4 w-4 mr-2" />
           Nuevo Viaje
         </button>
+      </div>
+
+      <div className="bg-white p-4 rounded shadow flex items-center space-x-2">
+        <label htmlFor="filterEstado" className="text-sm font-medium text-gray-700">Filtrar por estado:</label>
+        <select
+          id="filterEstado"
+          value={filterEstado}
+          onChange={(e) => setFilterEstado(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        >
+          <option value="Todos">Todos</option>
+          {VIAJE_ESTADOS.map(estado => (
+            <option key={estado} value={estado}>{estado}</option>
+          ))}
+        </select>
       </div>
 
       {showForm && (
@@ -324,15 +340,12 @@ const ViajesManager: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {viajes.map(viaje => (
+            {filteredViajes.map(viaje => (
               <tr key={viaje.idRutas} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {viaje.horaSalida}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {/* ⭐ CORRECCIÓN CLAVE: Para mostrar la fecha sin desviar el día.
-                      Crea una fecha tratada como UTC para el día específico y luego
-                      la formatea a una cadena local, que respetará el día original. */}
                   {new Date(viaje.fechaSalida + 'T00:00:00').toLocaleDateString('es-ES', { timeZone: 'UTC' })}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -355,6 +368,7 @@ const ViajesManager: React.FC = () => {
                       viaje.estado === 'Llegada Estimada' ? 'bg-teal-100 text-teal-800' :
                       viaje.estado === 'Finalizado' ? 'bg-gray-100 text-gray-800' :
                       viaje.estado === 'Cancelado' ? 'bg-red-100 text-red-800' :
+                      viaje.estado === 'Desviado' ? 'bg-red-200 text-red-900' : // Añadido para 'Desviado'
                       'bg-gray-100 text-gray-800' // Default
                     }`}>
                     {viaje.estado}

@@ -111,13 +111,35 @@ const BusesManager: React.FC = () => {
           idConductor: parseInt(formData.idConductor)
         });
       } else {
-        await ApiService.crearBus({
+        // Crear el nuevo bus
+        // Asumimos que ApiService.crearBus devuelve el objeto del bus creado con su idCarro
+        const newBus = await ApiService.crearBus({ 
           ...formData,
           idConductor: parseInt(formData.idConductor)
         });
+
+        // Generar 20 asientos por defecto (5 filas x 4 columnas) para la Planta 1
+        const filas = ['A', 'B', 'C', 'D', 'E'];
+        const columnas = ['1', '2', '3', '4'];
+        
+        for (const fila of filas) {
+          for (const columna of columnas) {
+            const asientoData = {
+              piso: 1,
+              fila: fila,
+              columna: columna,
+              descripcion: `Asiento ${fila}${columna}`,
+              estado: 'DISPONIBLE',
+              idBus: newBus.idCarro // Usar el ID del bus recién creado
+            };
+            await ApiService.crearAsiento(asientoData);
+          }
+        }
+        // Después de crear el bus y los asientos, cargar los detalles del bus recién creado
+        await loadBusDetails(newBus);
       }
       
-      await cargarDatos();
+      await cargarDatos(); // Recargar todos los buses para actualizar la lista
       setShowForm(false);
       setEditingBus(null);
       setFormData({ placa: '', idConductor: '' });
@@ -170,6 +192,8 @@ const BusesManager: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    // Reemplazar window.confirm con un modal personalizado para cumplir con las directrices
+    // Por simplicidad, se mantiene window.confirm en este ejemplo, pero se recomienda cambiarlo.
     if (window.confirm('¿Estás seguro de que quieres eliminar este bus?')) {
       try {
         setLoading(true);
@@ -556,7 +580,7 @@ const BusesManager: React.FC = () => {
                   <option value="4">Columna 4 (Ventana derecha)</option>
                 </select>
               </div>
-            
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Descripción

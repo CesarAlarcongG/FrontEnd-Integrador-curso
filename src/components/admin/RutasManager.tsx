@@ -1,3 +1,4 @@
+// components/RutasManager.tsx
 import React, { useState, useEffect } from 'react';
 import {
   Plus,
@@ -44,12 +45,20 @@ const RutasManager: React.FC = () => {
     }
   };
 
-  const getJSONParaEnviar = () => ({
-    nombre: formData.nombre,
-    idAdministrador: parseInt(formData.idAdministrador),
-    agenciasIds: formData.agenciasSeleccionadas.map((ag) => ag.idAgencia),
-    ordenAgencias: formData.agenciasSeleccionadas.map((ag) => ag.idAgencia),
-  });
+  const getJSONParaEnviar = () => {
+    const data: any = {
+      nombre: formData.nombre,
+      idAdministrador: parseInt(formData.idAdministrador),
+      agenciasIds: formData.agenciasSeleccionadas.map((ag) => ag.idAgencia),
+    };
+
+    // Solo agregamos idRuta si estamos editando
+    if (rutaEditandoId) {
+      data.idRuta = rutaEditandoId;
+    }
+
+    return data;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,8 +126,8 @@ const RutasManager: React.FC = () => {
     );
     const arr = exists
       ? formData.agenciasSeleccionadas.filter(
-          (a) => a.idAgencia !== ag.idAgencia
-        )
+        (a) => a.idAgencia !== ag.idAgencia
+      )
       : [...formData.agenciasSeleccionadas, ag];
     setFormData({ ...formData, agenciasSeleccionadas: arr });
   };
@@ -151,8 +160,8 @@ const RutasManager: React.FC = () => {
           onSubmit={handleSubmit}
           className="bg-white p-6 rounded-lg shadow space-y-4"
         >
-          <div>
-            {/* <label className="block text-sm font-medium text-gray-700 mb-1">
+          {/*<div>
+             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nombre
             </label>
             <input
@@ -163,8 +172,8 @@ const RutasManager: React.FC = () => {
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               required
-            /> */}
-          </div>
+            /> 
+          </div> */}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -189,8 +198,38 @@ const RutasManager: React.FC = () => {
               ))}
             </select>
           </div>
-
+              <div> 
+                <br />
+              </div>
           <div>
+
+
+            <label className="block mt-4 text-sm font-medium text-gray-700 mb-1">
+              Seleccionar Agencias
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {agencias.map((ag) => (
+                <label
+                  key={ag.idAgencia}
+                  className="flex items-center space-x-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.agenciasSeleccionadas.some(
+                      (a) => a.idAgencia === ag.idAgencia
+                    )}
+                    onChange={() => toggleAgenciaSeleccionada(ag)}
+                  />
+                  <span>
+                    {ag.provincia}
+                  </span>
+                </label>
+              ))}
+            </div>
+              <div> 
+                <br />
+              </div>
+              
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Agencias (ordenadas)
             </label>
@@ -220,29 +259,8 @@ const RutasManager: React.FC = () => {
                 </div>
               ))}
             </div>
-            <label className="block mt-4 text-sm font-medium text-gray-700 mb-1">
-              Seleccionar Agencias
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {agencias.map((ag) => (
-                <label
-                  key={ag.idAgencia}
-                  className="flex items-center space-x-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.agenciasSeleccionadas.some(
-                      (a) => a.idAgencia === ag.idAgencia
-                    )}
-                    onChange={() => toggleAgenciaSeleccionada(ag)}
-                  />
-                  <span>
-                    {ag.provincia}
-                  </span>
-                </label>
-              ))}
-            </div>
           </div>
+          {/*
 
           <div className="mt-4 bg-gray-50 border rounded p-4">
             <h4 className="font-semibold">JSON a enviar</h4>
@@ -250,6 +268,7 @@ const RutasManager: React.FC = () => {
               {JSON.stringify(getJSONParaEnviar(), null, 2)}
             </pre>
           </div>
+          */}
 
           <div className="flex justify-end space-x-2">
             <button
@@ -267,8 +286,8 @@ const RutasManager: React.FC = () => {
               {loading
                 ? 'Guardando...'
                 : rutaEditandoId
-                ? 'Actualizar Ruta'
-                : 'Guardar Ruta'}
+                  ? 'Actualizar Ruta'
+                  : 'Guardar Ruta'}
             </button>
           </div>
         </form>
@@ -343,13 +362,12 @@ const RutasManager: React.FC = () => {
                               return (
                                 <div
                                   key={ag.idAgencia}
-                                  className={`border rounded p-4 shadow-sm ${
-                                    inicio
-                                      ? 'border-green-500 bg-green-50'
-                                      : destino
+                                  className={`border rounded p-4 shadow-sm ${inicio
+                                    ? 'border-green-500 bg-green-50'
+                                    : destino
                                       ? 'border-red-500 bg-red-50'
                                       : 'border-gray-200 bg-white'
-                                  }`}
+                                    }`}
                                 >
                                   <div className="text-xs text-gray-500 mb-1">
                                     #{idx + 1}

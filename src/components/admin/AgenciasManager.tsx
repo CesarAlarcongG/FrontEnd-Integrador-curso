@@ -38,10 +38,10 @@ const AgenciasManager: React.FC = () => {
           ...formData,
           idAgencia: editingAgencia.idAgencia
         });
-        alert('✅ Agencia actualizada correctamente.');
+        
       } else {
         await ApiService.crearAgencia(formData);
-        alert('✅ Agencia creada correctamente.');
+        
       }
 
       await cargarAgencias();
@@ -69,7 +69,7 @@ const AgenciasManager: React.FC = () => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta agencia?')) {
       try {
         await ApiService.eliminarAgencia(id);
-        alert('✅ Agencia eliminada correctamente.');
+        
         await cargarAgencias();
         if (editingAgencia?.idAgencia === id) handleCancel();
       } catch (error) {

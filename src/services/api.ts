@@ -1,9 +1,9 @@
+// services/api.ts
 const API_BASE_URL = 'http://localhost:8080/api';
 
 class ApiService {
   private static instance: ApiService;
   private token: string | null = null;
-
 
   private constructor() {
     this.token = localStorage.getItem('token');
@@ -167,10 +167,18 @@ class ApiService {
   async obtenerRutaPorId(id: number) {
     return this.request<any>(`/rutas/${id}`);
   }
+
+
   async editarRuta(id: number, ruta: any) {
+    // Asegurarnos de incluir el idRuta en el cuerpo de la solicitud
+    const requestBody = {
+      ...ruta,
+      idRuta: id // Esto es crucial para que el backend pueda identificar la entidad
+    };
+
     return this.request<any>(`/rutas/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(ruta),
+      body: JSON.stringify(requestBody),
     });
   }
 
@@ -292,7 +300,6 @@ class ApiService {
     });
   }
 
-
   // Viajes
   async crearViaje(data: any) {
     console.log('Enviando viaje:', JSON.stringify(data, null, 2));
@@ -307,8 +314,8 @@ class ApiService {
     return this.request<any[]>('/viajes');
   }
 
-  async obtenerViajePorId(id: number): Promise<any> { // ⭐ Nuevo método para obtener viaje por ID ⭐
-    return this.request<any>(`/viajes/${id}`, {}, false); // Asumiendo que no requiere autenticación para consultar estado
+  async obtenerViajePorId(id: number): Promise<any> {
+    return this.request<any>(`/viajes/${id}`, {}, false);
   }
 
   async buscarViajes(data: any) {
@@ -319,6 +326,7 @@ class ApiService {
   }
 
   async editarViaje(id: number, data: any) {
+    console.log(data);
     return this.request<any>(`/viajes/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -340,7 +348,7 @@ class ApiService {
   }
 
   async obtenerPasajes(): Promise<any[]> {
-    return this.request('/pasajes', {}, false); 
+    return this.request('/pasajes', {}, false);
   }
 
   async obtenerPasajesPorUsuario(usuarioId: number): Promise<any[]> {
