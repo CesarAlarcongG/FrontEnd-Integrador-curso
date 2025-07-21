@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Bus, ChevronUp, ChevronDown, Layers } from 'lucide-react';
+import { Plus, Edit, Trash2, Bus, ChevronUp, ChevronDown, Layers, Download } from 'lucide-react';
 import ApiService from '../../services/api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+interface Pasajero {
+  idUsuario: number;
+  dni: string;
+  nombres: string;
+  apellidos: string;
+  edad: number;
+  permisos: string;
+  idAsiento: number | null;
+}
 
 interface Asiento {
   idAsiento: number;
@@ -10,6 +22,15 @@ interface Asiento {
   descripcion: string;
   estado: string;
   idBus: number;
+  usuario: Pasajero | null;
+}
+
+interface Conductor {
+  idTrabajador: number;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  estado: string;
 }
 
 interface Bus {
@@ -19,14 +40,15 @@ interface Bus {
   conductor?: {
     nombre: string;
     apellido: string;
-    dni?: string;  
+    dni?: string;
+    estado?: string;
   };
   asientos?: Asiento[];
 }
 
 const BusesManager: React.FC = () => {
   const [buses, setBuses] = useState<Bus[]>([]);
-  const [conductores, setConductores] = useState<any[]>([]);
+  const [conductores, setConductores] = useState<Conductor[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingBus, setEditingBus] = useState<Bus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +58,7 @@ const BusesManager: React.FC = () => {
   });
   const [selectedBus, setSelectedBus] = useState<Bus | null>(null);
   const [currentFloor, setCurrentFloor] = useState<number>(1);
-    const [asientoForm, setAsientoForm] = useState({
+  const [asientoForm, setAsientoForm] = useState({
     piso: 1,
     fila: '',
     columna: '',
@@ -60,21 +82,30 @@ const BusesManager: React.FC = () => {
         ApiService.obtenerConductores()
       ]);
 
-      // Mapear los buses para incluir la información del conductor
-      const busesConConductores = busesResponse.map(bus => {
-        const conductor = conductoresResponse.find(c => c.idTrabajador === bus.idConductor);
+      // Filtrar solo conductores disponibles
+      const conductoresDisponibles = conductoresResponse.filter(
+        (conductor) => conductor.estado === 'DISPONIBLE'
+      );
+
+      const busesConConductores = busesResponse.map((bus) => {
+        const conductor = conductoresResponse.find(
+          (c) => c.idTrabajador === bus.idConductor
+        );
         return {
           ...bus,
-          conductor: conductor ? {
-            nombre: conductor.nombre,
-            apellido: conductor.apellido,
-            dni: conductor.dni
-          } : undefined
+          conductor: conductor
+            ? {
+                nombre: conductor.nombre,
+                apellido: conductor.apellido,
+                dni: conductor.dni,
+                estado: conductor.estado,
+              }
+            : undefined,
         };
       });
 
       setBuses(busesConConductores);
-      setConductores(conductoresResponse);
+      setConductores(conductoresDisponibles);
     } catch (error) {
       console.error('Error al cargar datos:', error);
       setError('Error al cargar los datos. Por favor, intente nuevamente.');
@@ -87,8 +118,14 @@ const BusesManager: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const detalles = await ApiService.obtenerAsientosPorBus(bus.idCarro);
-      const updatedBus = { ...bus, asientos: detalles };
+      const detalles = await ApiService.obtenerAsientosConPasajeros(bus.idCarro);
+      
+      const detallesNormalizados = detalles.map(asiento => ({
+        ...asiento,
+        estado: asiento.estado.toUpperCase()
+      }));
+      
+      const updatedBus = { ...bus, asientos: detallesNormalizados };
       setBuses(buses.map(b => b.idCarro === bus.idCarro ? updatedBus : b));
       setSelectedBus(updatedBus);
     } catch (error) {
@@ -97,6 +134,190 @@ const BusesManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const generatePDF = () => {
+    if (!selectedBus || !selectedBus.asientos) return;
+
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    doc.setFontSize(18);
+    doc.text(`Distribución de Asientos - Bus ${selectedBus.placa}`, 148.5, 15, { align: 'center' });
+
+    if (selectedBus.conductor) {
+      doc.setFontSize(12);
+      doc.text(
+        `Conductor: ${selectedBus.conductor.nombre} ${selectedBus.conductor.apellido}${selectedBus.conductor.dni ? ` (DNI: ${selectedBus.conductor.dni})` : ''}`,
+        148.5, 25, { align: 'center' }
+      );
+    }
+
+    doc.setDrawColor(200);
+    doc.setLineWidth(0.5);
+    doc.line(20, 30, 277, 30);
+
+    const asientosPorPiso: Record<number, Asiento[]> = {};
+    selectedBus.asientos.forEach(asiento => {
+      if (!asientosPorPiso[asiento.piso]) {
+        asientosPorPiso[asiento.piso] = [];
+      }
+      asientosPorPiso[asiento.piso].push(asiento);
+    });
+
+    let yPosition = 40;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+
+    Object.entries(asientosPorPiso).forEach(([piso, asientos]) => {
+      if (yPosition + 100 > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      
+      doc.setFontSize(14);
+      doc.text(`Planta ${piso}`, 20, yPosition);
+      yPosition += 10;
+
+      drawBusLayout(doc, asientos, yPosition);
+      yPosition += 50;
+
+      const pasajeros = asientos.filter(a => a.estado === 'OCUPADO' || a.estado === 'RESERVADO');
+      if (pasajeros.length > 0) {
+        doc.setFontSize(12);
+        
+        if (yPosition + 10 > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        doc.text(`Pasajeros - Planta ${piso}`, 20, yPosition);
+        yPosition += 5;
+
+        const headers = [['Asiento', 'Nombre', 'DNI', 'Estado']];
+        const data = pasajeros
+          .sort((a, b) => a.fila.localeCompare(b.fila) || a.columna.localeCompare(b.columna))
+          .map(asiento => [
+            `${asiento.fila}${asiento.columna}`,
+            asiento.usuario ? `${asiento.usuario.nombres} ${asiento.usuario.apellidos}` : '-',
+            asiento.usuario?.dni || '-',
+            asiento.estado.toLowerCase()
+          ]);
+
+        autoTable(doc, {
+          startY: yPosition,
+          head: headers,
+          body: data,
+          margin: { left: 20 },
+          styles: { fontSize: 10 },
+          headStyles: { fillColor: [41, 128, 185] },
+          didDrawPage: (data) => {
+            if (data.pageNumber > 1) {
+              yPosition = data.settings.margin.top;
+            }
+          }
+        });
+
+        yPosition = (doc as any).lastAutoTable.finalY + 15;
+      } else {
+        doc.setFontSize(10);
+        
+        if (yPosition + 10 > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        
+        doc.text('No hay pasajeros en esta planta', 20, yPosition);
+        yPosition += 15;
+      }
+
+      yPosition += 10;
+    });
+
+    doc.save(`asientos-bus-${selectedBus.placa}.pdf`);
+  };
+
+  const drawBusLayout = (doc: jsPDF, asientos: Asiento[], y: number) => {
+    const startX = 20;
+    const seatSize = 8;
+    const gap = 2;
+    
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(startX, y, 240, 40, 2, 2, 'S');
+    
+    doc.setFillColor(230, 230, 230);
+    doc.rect(startX + 80, y, 80, 40, 'F');
+    doc.text('Pasillo', startX + 120, y + 20, { align: 'center' });
+    
+    const filas: Record<string, Asiento[]> = {};
+    asientos.forEach(asiento => {
+      if (!filas[asiento.fila]) filas[asiento.fila] = [];
+      filas[asiento.fila].push(asiento);
+    });
+    
+    let seatY = y + 5;
+    Object.entries(filas).forEach(([fila, asientosFila]) => {
+      const asientosIzq = asientosFila
+        .filter(a => ['1', '2'].includes(a.columna))
+        .sort((a, b) => a.columna.localeCompare(b.columna));
+      
+      let seatX = startX + 70;
+      asientosIzq.forEach(asiento => {
+        if (asiento.estado === 'OCUPADO') doc.setFillColor(231, 76, 60);
+        else if (asiento.estado === 'RESERVADO') doc.setFillColor(241, 196, 15);
+        else doc.setFillColor(46, 204, 113);
+        
+        doc.roundedRect(seatX - seatSize - gap, seatY, seatSize, seatSize, 1, 1, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(6);
+        doc.text(`${fila}${asiento.columna}`, seatX - seatSize/2 - gap, seatY + seatSize/2 + 1, { align: 'center' });
+        
+        seatX -= seatSize + gap;
+      });
+      
+      seatY += seatSize + gap;
+    });
+    
+    seatY = y + 5;
+    Object.entries(filas).forEach(([fila, asientosFila]) => {
+      const asientosDer = asientosFila
+        .filter(a => ['3', '4'].includes(a.columna))
+        .sort((a, b) => a.columna.localeCompare(b.columna));
+      
+      let seatX = startX + 160;
+      asientosDer.forEach(asiento => {
+        if (asiento.estado === 'OCUPADO') doc.setFillColor(231, 76, 60);
+        else if (asiento.estado === 'RESERVADO') doc.setFillColor(241, 196, 15);
+        else doc.setFillColor(46, 204, 113);
+        
+        doc.roundedRect(seatX, seatY, seatSize, seatSize, 1, 1, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(6);
+        doc.text(`${fila}${asiento.columna}`, seatX + seatSize/2, seatY + seatSize/2 + 1, { align: 'center' });
+        
+        seatX += seatSize + gap;
+      });
+      
+      seatY += seatSize + gap;
+    });
+    
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(46, 204, 113);
+    doc.roundedRect(startX + 180, y + 35, 6, 6, 1, 1, 'F');
+    doc.text('Disponible', startX + 190, y + 38);
+    
+    doc.setFillColor(241, 196, 15);
+    doc.roundedRect(startX + 180, y + 30, 6, 6, 1, 1, 'F');
+    doc.text('Reservado', startX + 190, y + 33);
+    
+    doc.setFillColor(231, 76, 60);
+    doc.roundedRect(startX + 180, y + 25, 6, 6, 1, 1, 'F');
+    doc.text('Ocupado', startX + 190, y + 28);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,14 +332,11 @@ const BusesManager: React.FC = () => {
           idConductor: parseInt(formData.idConductor)
         });
       } else {
-        // Crear el nuevo bus
-        // Asumimos que ApiService.crearBus devuelve el objeto del bus creado con su idCarro
         const newBus = await ApiService.crearBus({ 
           ...formData,
           idConductor: parseInt(formData.idConductor)
         });
 
-        // Generar 20 asientos por defecto (5 filas x 4 columnas) para la Planta 1
         const filas = ['A', 'B', 'C', 'D', 'E'];
         const columnas = ['1', '2', '3', '4'];
         
@@ -130,16 +348,15 @@ const BusesManager: React.FC = () => {
               columna: columna,
               descripcion: `Asiento ${fila}${columna}`,
               estado: 'DISPONIBLE',
-              idBus: newBus.idCarro // Usar el ID del bus recién creado
+              idBus: newBus.idCarro
             };
             await ApiService.crearAsiento(asientoData);
           }
         }
-        // Después de crear el bus y los asientos, cargar los detalles del bus recién creado
         await loadBusDetails(newBus);
       }
       
-      await cargarDatos(); // Recargar todos los buses para actualizar la lista
+      await cargarDatos();
       setShowForm(false);
       setEditingBus(null);
       setFormData({ placa: '', idConductor: '' });
@@ -152,11 +369,11 @@ const BusesManager: React.FC = () => {
   };
 
   const handleAsientoSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setError(null);
-  
-  try {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    
+    try {
       await ApiService.crearAsiento({
         ...asientoForm,
         idBus: selectedBus?.idCarro || 0
@@ -192,8 +409,6 @@ const BusesManager: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    // Reemplazar window.confirm con un modal personalizado para cumplir con las directrices
-    // Por simplicidad, se mantiene window.confirm en este ejemplo, pero se recomienda cambiarlo.
     if (window.confirm('¿Estás seguro de que quieres eliminar este bus?')) {
       try {
         setLoading(true);
@@ -229,7 +444,11 @@ const BusesManager: React.FC = () => {
       <div 
         key={`${asiento.piso}-${asiento.fila}${asiento.columna}`}
         className={`${bgColor} p-2 rounded-md text-center text-sm font-medium cursor-pointer hover:opacity-80 relative`}
-        title={`${asiento.fila}${asiento.columna} - ${asiento.descripcion}`}
+        title={
+          asiento.usuario 
+            ? `${asiento.fila}${asiento.columna} - ${asiento.usuario.nombres} ${asiento.usuario.apellidos} (DNI: ${asiento.usuario.dni})`
+            : `${asiento.fila}${asiento.columna} - ${asiento.descripcion}`
+        }
       >
         {asiento.fila}{asiento.columna}
         {isWindowSide && (
@@ -244,7 +463,6 @@ const BusesManager: React.FC = () => {
     
     const asientosPlanta = selectedBus.asientos.filter(a => a.piso === planta);
     
-    // Organizar asientos por fila
     const filas: {[key: string]: Asiento[]} = {};
     asientosPlanta.forEach(asiento => {
       if (!filas[asiento.fila]) filas[asiento.fila] = [];
@@ -258,14 +476,10 @@ const BusesManager: React.FC = () => {
           Planta {planta}
         </h3>
         <div className="border rounded-lg p-4 bg-gray-50">
-          {/* Representación del bus */}
           <div className="flex flex-col items-center mb-4">
-            {/* Techo */}
             <div className="w-full h-4 bg-gray-400 rounded-t-lg mb-2"></div>
             
-            {/* Cuerpo del bus */}
             <div className="flex w-full">
-              {/* Lado izquierdo (ventanas) - 2 columnas */}
               <div className="w-2/6 flex flex-col items-end pr-2">
                 <div className="w-full h-4 bg-blue-100 mb-1 rounded-l"></div>
                 {Object.entries(filas).map(([fila, asientosFila]) => {
@@ -282,12 +496,10 @@ const BusesManager: React.FC = () => {
                 <div className="w-full h-4 bg-blue-100 mt-1 rounded-l"></div>
               </div>
               
-              {/* Pasillo */}
               <div className="w-2/6 h-64 bg-gray-200 flex items-center justify-center text-gray-500">
                 Pasillo
               </div>
               
-              {/* Lado derecho (ventanas) - 2 columnas */}
               <div className="w-2/6 flex flex-col items-start pl-2">
                 <div className="w-full h-4 bg-blue-100 mb-1 rounded-r"></div>
                 {Object.entries(filas).map(([fila, asientosFila]) => {
@@ -305,7 +517,6 @@ const BusesManager: React.FC = () => {
               </div>
             </div>
             
-            {/* Piso */}
             <div className="w-full h-4 bg-gray-400 rounded-b-lg mt-2"></div>
           </div>
         </div>
@@ -357,27 +568,41 @@ const BusesManager: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Conductor
+                Conductor (solo disponibles)
               </label>
               <select
                 value={formData.idConductor}
                 onChange={(e) => setFormData({...formData, idConductor: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 required
-                disabled={loading}
+                disabled={loading || conductores.length === 0}
               >
                 <option value="">Seleccionar conductor</option>
-                {conductores.map(conductor => (
-                  <option key={conductor.idTrabajador} value={conductor.idTrabajador}>
-                    {conductor.nombre} {conductor.apellido} - DNI: {conductor.dni}
+                {conductores.length === 0 ? (
+                  <option value="" disabled>
+                    No hay conductores disponibles
                   </option>
-                ))}
+                ) : (
+                  conductores.map((conductor) => (
+                    <option
+                      key={conductor.idTrabajador}
+                      value={conductor.idTrabajador}
+                    >
+                      {conductor.nombre} {conductor.apellido} - DNI: {conductor.dni}
+                    </option>
+                  ))
+                )}
               </select>
+              {conductores.length === 0 && (
+                <p className="mt-1 text-sm text-red-600">
+                  No hay conductores disponibles. Registre conductores con estado DISPONIBLE.
+                </p>
+              )}
             </div>
             <div className="flex space-x-2">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || conductores.length === 0}
                 className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Guardando...' : 'Guardar'}
@@ -477,24 +702,34 @@ const BusesManager: React.FC = () => {
                 <h2 className="text-xl font-semibold">
                   Asientos del Bus: {selectedBus.placa}
                 </h2>
-                <button
-                  onClick={() => {
-                    setAsientoForm({
-                      piso: 1,
-                      fila: '',
-                      columna: '',
-                      descripcion: '',
-                      estado: 'DISPONIBLE',
-                      idBus: selectedBus.idCarro
-                    });
-                    setShowAsientoForm(true);
-                  }}
-                  className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors flex items-center text-sm"
-                  disabled={loading}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Nuevo Asiento
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={generatePDF}
+                    className="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors flex items-center text-sm"
+                    disabled={loading}
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    Generar PDF
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAsientoForm({
+                        piso: 1,
+                        fila: '',
+                        columna: '',
+                        descripcion: '',
+                        estado: 'DISPONIBLE',
+                        idBus: selectedBus.idCarro
+                      });
+                      setShowAsientoForm(true);
+                    }}
+                    className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors flex items-center text-sm"
+                    disabled={loading}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Nuevo Asiento
+                  </button>
+                </div>
               </div>
 
               <div className="flex space-x-2 mb-4">

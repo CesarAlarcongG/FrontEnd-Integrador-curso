@@ -265,6 +265,10 @@ class ApiService {
     });
   }
 
+  async obtenerAsientosConPasajeros(idBus: number) {
+    return this.request<any[]>(`/asientos/ayu/${idBus}`);
+  }
+
   async obtenerAsientos() {
     return this.request<any[]>('/asientos');
   }
